@@ -1,0 +1,113 @@
+#include <stdio.h>
+#include <stdlib.h>
+#include <unistd.h>
+#include <sys/types.h>
+#include <sys/ipc.h>
+#include <sys/msg.h>
+#include <sys/wait.h>
+
+#define SEQUENCE_LENGTH 16
+
+struct message {
+    long mtype;
+    char mtext[1];
+};
+
+void print_char(char c, int msqid, long send_to) {
+    struct message msg;
+    msg.mtype = send_to;
+    msg.mtext[0] = c;
+    msgsnd(msqid, &msg, sizeof(msg.mtext), 0);
+}
+
+void process_A(int msqid) {
+    struct message msg;
+    int count = 0;
+    while (count < SEQUENCE_LENGTH) {
+        msgrcv(msqid, &msg, sizeof(msg.mtext), 1, 0);
+        if (count < SEQUENCE_LENGTH) {
+            printf("A");
+            fflush(stdout);
+            count++;
+            if (count % 7 == 0) {
+                print_char('A', msqid, 3);  // Enviar a C
+            } else {
+                print_char('A', msqid, 2);  // Enviar a B
+            }
+        }
+    }
+}
+
+void process_B(int msqid) {
+    struct message msg;
+    int count = 0;
+    while (count < SEQUENCE_LENGTH) {
+        msgrcv(msqid, &msg, sizeof(msg.mtext), 2, 0);
+        if (count < SEQUENCE_LENGTH - 1) {
+            printf("B");
+            fflush(stdout);
+            count++;
+            print_char('B', msqid, 1);  // Enviar a A
+        } else {
+            print_char('B', msqid, 3);  // Enviar a C para el último carácter
+        }
+    }
+}
+
+void process_C(int msqid) {
+    struct message msg;
+    int count = 0;
+    while (count < SEQUENCE_LENGTH) {
+        msgrcv(msqid, &msg, sizeof(msg.mtext), 3, 0);
+        if (count < SEQUENCE_LENGTH) {
+            printf("C");
+            fflush(stdout);
+            count++;
+            if (count < SEQUENCE_LENGTH) {
+                print_char('C', msqid, 1);  // Enviar a A
+            }
+        }
+    }
+}
+
+int main() {
+    int msqid = msgget(IPC_PRIVATE, IPC_CREAT | 0666);
+    if (msqid == -1) {
+        perror("msgget");
+        exit(1);
+    }
+
+    pid_t pid_a, pid_b, pid_c;
+
+    if ((pid_a = fork()) == 0) {
+        process_A(msqid);
+        exit(0);
+    }
+
+    if ((pid_b = fork()) == 0) {
+        process_B(msqid);
+        exit(0);
+    }
+
+    if ((pid_c = fork()) == 0) {
+        process_C(msqid);
+        exit(0);
+    }
+
+    // Iniciar la secuencia
+    struct message msg;
+    msg.mtype = 1;
+    msg.mtext[0] = 'S';  // Start
+    msgsnd(msqid, &msg, sizeof(msg.mtext), 0);
+
+    // Esperar a que todos los procesos hijos terminen
+    waitpid(pid_a, NULL, 0);
+    waitpid(pid_b, NULL, 0);
+    waitpid(pid_c, NULL, 0);
+
+    // Eliminar la cola de mensajes
+    msgctl(msqid, IPC_RMID, NULL);
+
+    printf("\n");
+    return 0;
+}
