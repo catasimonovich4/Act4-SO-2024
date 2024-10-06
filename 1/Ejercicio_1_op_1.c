@@ -2,13 +2,11 @@
 #include <pthread.h>
 #include <semaphore.h>
 #include <unistd.h>
-
 #define SEQUENCE_LENGTH 16
 
 void* print_A(void* arg);
 void* print_B(void* arg);
 void* print_C(void* arg);
-
 typedef struct {
     sem_t* sem_a;
     sem_t* sem_b;
@@ -20,25 +18,19 @@ int main() {
     pthread_t thread_a, thread_b, thread_c;
     sem_t sem_a, sem_b, sem_c;
     int count = 0;
-
     sem_init(&sem_a, 0, 1);
     sem_init(&sem_b, 0, 0);
     sem_init(&sem_c, 0, 0);
-
     thread_args args = {&sem_a, &sem_b, &sem_c, &count};
-
     pthread_create(&thread_a, NULL, print_A, &args);
     pthread_create(&thread_b, NULL, print_B, &args);
     pthread_create(&thread_c, NULL, print_C, &args);
-
     pthread_join(thread_a, NULL);
     pthread_join(thread_b, NULL);
     pthread_join(thread_c, NULL);
-
     sem_destroy(&sem_a);
     sem_destroy(&sem_b);
     sem_destroy(&sem_c);
-
     printf("\n");
     return 0;
 }
@@ -51,7 +43,7 @@ void* print_A(void* arg) {
             printf("A");
             fflush(stdout);
             (*(args->count))++;
-            if (*(args->count) % 7 == 0) {
+            if (*(args->count) == 7) {
                 sem_post(args->sem_c);
             } else {
                 sem_post(args->sem_b);
@@ -85,9 +77,10 @@ void* print_C(void* arg) {
             printf("C");
             fflush(stdout);
             (*(args->count))++;
-            if (*(args->count) < SEQUENCE_LENGTH) {
-                sem_post(args->sem_a);
-            }
+        }
+        if (*(args->count) < SEQUENCE_LENGTH) {
+            sem_post(args->sem_a);
+        }
     
     }
     return NULL;
